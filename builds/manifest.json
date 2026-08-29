@@ -1,0 +1,26 @@
+{
+  "name": "math-viz-plugin",
+  "version": "1.0.0",
+  "pluginApiVersionRequirement": ">=1.0.0",
+  "author": "LLMProf",
+  "description": "Step-by-step mathematical formula visualization with KaTeX rendering.",
+  "capabilities": [
+    {
+      "id": "renderFormulaVisualization",
+      "type": "tool",
+      "execute": "renderFormulaVisualization",
+      "execution_timeout_ms": 30000
+    }
+  ],
+  "host_capabilities": [
+    {
+      "id": "log",
+      "execution_timeout_ms": 3000
+    }
+  ],
+  "allowed_hosts": [],
+  "lifecycle": {
+    "on_install": "on_install",
+    "on_uninstall": "on_uninstall"
+  }
+}

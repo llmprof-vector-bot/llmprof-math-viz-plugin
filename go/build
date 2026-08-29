@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+docker run --rm -v "$(pwd)":/workspace -w /workspace golang:latest sh -c 'go mod tidy && GOOS=wasip1 GOARCH=wasm go build -o plugin.wasm -buildmode=c-shared .'
+echo "Built: $(pwd)/plugin.wasm"
