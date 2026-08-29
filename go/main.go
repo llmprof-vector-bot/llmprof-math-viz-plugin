@@ -87,8 +87,9 @@ func storageExists(filename string) bool {
 // ---------------------------------------------------------------------------
 
 type Step struct {
-	Tex  string `json:"tex"`
-	Note string `json:"note"`
+	Tex                  string `json:"tex"`
+	Note                 string `json:"note"`
+	DetailedExplanation  string `json:"detailed_explanation,omitempty"`
 }
 
 type VizData struct {
@@ -112,7 +113,7 @@ func renderFormulaVisualization() int32 {
 		return 1
 	}
 
-	mode, _ := inputData["mode"].((string))
+	mode, _ := inputData["mode"].(string)
 	switch mode {
 	case "define":
 		return handleDefine(inputData)
@@ -136,7 +137,7 @@ func handleDefine(inputData map[string]any) int32 {
 	definition := map[string]any{
 		"mode": "define",
 		"name": "renderFormulaVisualization",
-		"description": "Render a step-by-step mathematical derivation or proof as an interactive animated visualization. Use this tool when the user asks about mathematical proofs, derivations, formula manipulations, or step-by-step calculations.",
+		"description": "Render a step-by-step mathematical derivation, proof, or formula manipulation as an interactive animated visualization with LaTeX rendering. Use this tool whenever a mathematical calculation, equation derivation, proof, or formula transformation should be shown step by step - even if the user doesn't explicitly ask for steps. Any time math involves multiple steps of algebraic manipulation, this tool should be used to provide a visual walkthrough.",
 		"parameters": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -156,7 +157,11 @@ func handleDefine(inputData map[string]any) int32 {
 							},
 							"note": map[string]any{
 								"type":        "string",
-								"description": "Brief explanation of the transformation applied in this step (1-2 sentences)",
+								"description": "Short label for this step (max ~80 chars). Keep it concise - use detailed_explanation for longer explanations.",
+							},
+							"detailed_explanation": map[string]any{
+								"type":        "string",
+								"description": "Optional: detailed explanation of this step. If provided, an info button in the visualization will show this text.",
 							},
 						},
 						"required": []string{"tex", "note"},
@@ -213,6 +218,7 @@ func handleExecute(inputData map[string]any) int32 {
 		}
 		tex, _ := s["tex"].(string)
 		note, _ := s["note"].(string)
+		detailedExplanation, _ := s["detailed_explanation"].(string)
 		if strings.TrimSpace(tex) == "" {
 			pdk.SetError(fmt.Errorf("step %d: tex must be non-empty", i))
 			return 1
@@ -221,7 +227,11 @@ func handleExecute(inputData map[string]any) int32 {
 			pdk.SetError(fmt.Errorf("step %d: note must be non-empty", i))
 			return 1
 		}
-		steps = append(steps, Step{Tex: tex, Note: note})
+		steps = append(steps, Step{
+			Tex:                 tex,
+			Note:                note,
+			DetailedExplanation: detailedExplanation,
+		})
 	}
 
 	// Build storage data
@@ -386,7 +396,6 @@ func buildAppletHTML(data VizData, katexJSBytes []byte, katexCSSBytes []byte) st
 	parts = append(parts, appletCSS())
 
 	parts = append(parts, "</style>\n</head>\n<body>\n")
-
 	// Container
 	parts = append(parts, "<div class=\"mv-container\">\n")
 
@@ -404,6 +413,11 @@ func buildAppletHTML(data VizData, katexJSBytes []byte, katexCSSBytes []byte) st
 	parts = append(parts, "  <div class=\"mv-prev-step\" id=\"mv-prev-step\"></div>\n")
 	parts = append(parts, "  <div class=\"mv-active-step\" id=\"mv-active-step\"></div>\n")
 	parts = append(parts, "  <div class=\"mv-note\" id=\"mv-note\"></div>\n")
+	// Info button row for detailed explanation
+	parts = append(parts, "  <div class=\"mv-info-row\">\n")
+	parts = append(parts, "    <button class=\"mv-info-btn\" id=\"mv-info-btn\" style=\"display:none;\" aria-label=\"Detailed explanation\">ⓘ</button>\n")
+	parts = append(parts, "    <div class=\"mv-info-panel\" id=\"mv-info-panel\" style=\"display:none;\"></div>\n")
+	parts = append(parts, "  </div>\n")
 	parts = append(parts, "</div>\n")
 
 	// Next button
@@ -505,7 +519,8 @@ body {
   justify-content: center;
   text-align: center;
   padding: 0 8px;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Previous step (faded, above) */
@@ -513,14 +528,14 @@ body {
   opacity: 0;
   transform: translateY(10px);
   transition: opacity 300ms ease, transform 300ms ease;
-  font-size: 16px;
+  font-size: 20px;
   color: #999;
-  margin-bottom: 4px;
-  min-height: 20px;
+  margin-bottom: 8px;
+  min-height: 28px;
 }
 
 .mv-prev-step.mv-visible {
-  opacity: 0.3;
+  opacity: 0.5;
   transform: translateY(0);
 }
 
@@ -533,6 +548,8 @@ body {
   align-items: center;
   justify-content: center;
   padding: 8px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mv-active-step.mv-fade-out {
@@ -563,6 +580,22 @@ body {
 .mv-note.mv-fade {
   opacity: 0;
 }
+
+/* Info button row */
+.mv-info-row { margin-top: 4px; text-align: center; }
+.mv-info-btn {
+  border: 1px solid #ccc; background: #f8f8f8; color: #666;
+  border-radius: 50%; width: 22px; height: 22px; font-size: 13px;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: all 200ms ease;
+}
+.mv-info-btn:hover { border-color: #2d7d2d; color: #2d7d2d; }
+.mv-info-panel {
+  margin-top: 6px; padding: 8px 12px; background: #f8f8f8; border-radius: 6px;
+  font-size: 12px; color: #555; text-align: left; max-width: 90%;
+  display: none; border: 1px solid #e0e0e0;
+}
+.mv-info-panel.mv-show { display: block; }
 
 /* Navigation buttons */
 .mv-nav-btn {
@@ -647,7 +680,7 @@ body {
 }
 
 .mv-prev-step .katex {
-  font-size: 0.8em;
+  font-size: 1.0em;
 }
 
 /* Responsive */
@@ -674,13 +707,14 @@ func appletJS(numSteps int) string {
   var totalSteps = `)
 	s = append(s, fmt.Sprintf("%d", numSteps))
 	s = append(s, `;
-
   var prevStepEl = document.getElementById('mv-prev-step');
   var activeStepEl = document.getElementById('mv-active-step');
   var noteEl = document.getElementById('mv-note');
   var prevBtn = document.getElementById('mv-prev');
   var nextBtn = document.getElementById('mv-next');
   var badgesEl = document.getElementById('mv-badges');
+  var infoBtn = document.getElementById('mv-info-btn');
+  var infoPanel = document.getElementById('mv-info-panel');
 
   function renderStep(tex, element) {
     try {
@@ -690,6 +724,18 @@ func appletJS(numSteps int) string {
       });
     } catch(e) {
       element.textContent = tex;
+    }
+  }
+
+  function renderNoteInline(text, element) {
+    element.innerHTML = '';
+    try {
+      katex.render(text, element, {
+        throwOnError: false,
+        displayMode: false
+      });
+    } catch(e) {
+      element.textContent = text;
     }
   }
 
@@ -710,8 +756,44 @@ func appletJS(numSteps int) string {
         prevStepEl.classList.add('mv-visible');
       }
 
-      // Update note
-      noteEl.textContent = step.note;
+      // Update note (render with KaTeX inline mode)
+      renderNoteInline(step.note, noteEl);
+
+      // Handle detailed explanation info button
+      var hasDetailed = step.detailed_explanation && step.detailed_explanation.trim() !== '';
+      if (hasDetailed) {
+        infoBtn.style.display = 'inline-flex';
+        // Reset panel state
+        infoPanel.classList.remove('mv-show');
+        infoPanel.style.display = 'none';
+        // Render detailed explanation with KaTeX inline mode
+        infoPanel.innerHTML = '';
+        try {
+          katex.render(step.detailed_explanation, infoPanel, {
+            throwOnError: false,
+            displayMode: false
+          });
+        } catch(e) {
+          infoPanel.textContent = step.detailed_explanation;
+        }
+        // Set up click handler (remove old, add new)
+        var newBtn = infoBtn.cloneNode(true);
+        infoBtn.parentNode.replaceChild(newBtn, infoBtn);
+        infoBtn = newBtn;
+        infoBtn.addEventListener('click', function() {
+          if (infoPanel.classList.contains('mv-show')) {
+            infoPanel.classList.remove('mv-show');
+            infoPanel.style.display = 'none';
+          } else {
+            infoPanel.classList.add('mv-show');
+            infoPanel.style.display = 'block';
+          }
+        });
+      } else {
+        infoBtn.style.display = 'none';
+        infoPanel.classList.remove('mv-show');
+        infoPanel.style.display = 'none';
+      }
 
       // Check if last step (result)
       if (currentStep === totalSteps - 1) {
@@ -782,16 +864,6 @@ func appletJS(numSteps int) string {
       nextStep();
     }
   });
-
-  // Mouse wheel navigation
-  document.addEventListener('wheel', function(e) {
-    e.preventDefault();
-    if (e.deltaY > 0) {
-      nextStep();
-    } else if (e.deltaY < 0) {
-      prevStep();
-    }
-  }, { passive: false });
 
   // Initial render
   updateDisplay();
