@@ -729,13 +729,45 @@ func appletJS(numSteps int) string {
 
   function renderNoteInline(text, element) {
     element.innerHTML = '';
-    try {
-      katex.render(text, element, {
-        throwOnError: false,
-        displayMode: false
-      });
-    } catch(e) {
+    // Split text by $...$ and \(...\) delimiters, render only the math parts with KaTeX
+    var parts = [];
+    var regex = /(\$[^$]+\$|\\\([^)]+\\\))/g;
+    var lastIndex = 0;
+    var match;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({type: 'text', value: text.substring(lastIndex, match.index)});
+      }
+      parts.push({type: 'math', value: match[0]});
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+      parts.push({type: 'text', value: text.substring(lastIndex)});
+    }
+    if (parts.length === 0) {
       element.textContent = text;
+      return;
+    }
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].type === 'text') {
+        var span = document.createElement('span');
+        span.textContent = parts[i].value;
+        element.appendChild(span);
+      } else {
+        var mathSpan = document.createElement('span');
+        element.appendChild(mathSpan);
+        var mathText = parts[i].value;
+        if (mathText.charAt(0) === '$') {
+          mathText = mathText.substring(1, mathText.length - 1);
+        } else {
+          mathText = mathText.substring(2, mathText.length - 2);
+        }
+        try {
+          katex.render(mathText, mathSpan, {throwOnError: false, displayMode: false});
+        } catch(e) {
+          mathSpan.textContent = parts[i].value;
+        }
+      }
     }
   }
 
@@ -766,16 +798,8 @@ func appletJS(numSteps int) string {
         // Reset panel state
         infoPanel.classList.remove('mv-show');
         infoPanel.style.display = 'none';
-        // Render detailed explanation with KaTeX inline mode
-        infoPanel.innerHTML = '';
-        try {
-          katex.render(step.detailed_explanation, infoPanel, {
-            throwOnError: false,
-            displayMode: false
-          });
-        } catch(e) {
-          infoPanel.textContent = step.detailed_explanation;
-        }
+        // Render detailed explanation with hybrid LaTeX/text renderer
+        renderNoteInline(step.detailed_explanation, infoPanel);
         // Set up click handler (remove old, add new)
         var newBtn = infoBtn.cloneNode(true);
         infoBtn.parentNode.replaceChild(newBtn, infoBtn);
