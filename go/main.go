@@ -53,6 +53,36 @@ func logInfo(message string)  { logHost("info", message) }
 func logError(message string) { logHost("error", message) }
 
 // ---------------------------------------------------------------------------
+// Host input envelope
+// ---------------------------------------------------------------------------
+
+// readHostEnvelope reads the raw host input and parses the
+// {"input": {...}, "plugin_config": {...}} envelope once, returning both
+// values. This avoids calling pdk.Input() multiple times.
+//
+// plugin_config contains the installation's configuration values as defined
+// by the plugin's configuration_schema in manifest.json (empty for this
+// plugin — it uses no configuration).
+func readHostEnvelope() (inputData map[string]any, pluginConfig map[string]any) {
+	inputBytes := pdk.Input()
+	var envelope struct {
+		Input        map[string]any `json:"input"`
+		PluginConfig map[string]any `json:"plugin_config"`
+	}
+	if err := json.Unmarshal(inputBytes, &envelope); err != nil {
+		logError(fmt.Sprintf("readHostEnvelope: failed to parse input JSON: %v", err))
+		return map[string]any{}, map[string]any{}
+	}
+	if envelope.Input == nil {
+		envelope.Input = map[string]any{}
+	}
+	if envelope.PluginConfig == nil {
+		envelope.PluginConfig = map[string]any{}
+	}
+	return envelope.Input, envelope.PluginConfig
+}
+
+// ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
 
@@ -105,13 +135,7 @@ type VizData struct {
 func renderFormulaVisualization() int32 {
 	logInfo("renderFormulaVisualization: entry point called")
 
-	inputBytes := pdk.Input()
-	var inputData map[string]any
-	if err := json.Unmarshal(inputBytes, &inputData); err != nil {
-		logError(fmt.Sprintf("renderFormulaVisualization: failed to parse input JSON: %v", err))
-		pdk.SetError(errors.New("invalid JSON input from host"))
-		return 1
-	}
+	inputData, _ := readHostEnvelope()
 
 	mode, _ := inputData["mode"].(string)
 	switch mode {
